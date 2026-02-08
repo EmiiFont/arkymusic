@@ -24,6 +24,7 @@ const (
 	stepAudioPath
 	stepRecordSettings
 	stepLyrics
+	stepPreset
 	stepStyle
 	stepAspect
 	stepDuration
@@ -70,6 +71,7 @@ type Model struct {
 	step             Step
 	inputType        inputType
 	inputTypeIdx     int
+	presetIdx        int
 	styleIdx         int
 	aspectIdx        int
 	audioPath        string
@@ -85,7 +87,6 @@ type Model struct {
 	recordingElapsed int
 	jobRunning       bool
 	jobEvents        []jobs.Event
-	jobEventIndex    int
 
 	audioPathInput    textinput.Model
 	recordDeviceInput textinput.Model
@@ -143,6 +144,7 @@ func NewModel(cfg config.Config, runner *jobs.Runner) Model {
 		runner:            runner,
 		step:              stepInputType,
 		inputTypeIdx:      0,
+		presetIdx:         0,
 		styleIdx:          0,
 		aspectIdx:         0,
 		audioPathInput:    audioPathInput,
@@ -254,6 +256,8 @@ func (model Model) View() string {
 		view = model.viewRecord()
 	case stepLyrics:
 		view = model.viewLyrics()
+	case stepPreset:
+		view = model.viewPreset()
 	case stepStyle:
 		view = model.viewStyle()
 	case stepAspect:
@@ -332,9 +336,18 @@ func (model Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		model.lyricsInput, cmd = model.lyricsInput.Update(msg)
 		if msg.Type == tea.KeyCtrlS || msg.String() == "enter" {
 			model.lyrics = strings.TrimSpace(model.lyricsInput.Value())
-			model.step = stepStyle
+			model.step = stepPreset
 		}
 		return model, cmd
+	case stepPreset:
+		switch msg.String() {
+		case "up", "k":
+			model.presetIdx = (model.presetIdx + len(presetOptions()) - 1) % len(presetOptions())
+		case "down", "j":
+			model.presetIdx = (model.presetIdx + 1) % len(presetOptions())
+		case "enter":
+			model.step = stepStyle
+		}
 	case stepStyle:
 		switch msg.String() {
 		case "up", "k":
@@ -406,6 +419,10 @@ func (model Model) viewLyrics() string {
 	return fmt.Sprintf("%s\n\n%s\n\n%s", headerStyle.Render("Lyrics (optional)"), model.lyricsInput.View(), subtle.Render("Ctrl+S or Enter to continue"))
 }
 
+func (model Model) viewPreset() string {
+	return renderSelect("Select outcome preset", presetOptions(), model.presetIdx)
+}
+
 func (model Model) viewStyle() string {
 	return renderSelect("Select style preset", styleOptions(), model.styleIdx)
 }
@@ -420,9 +437,10 @@ func (model Model) viewDuration() string {
 
 func (model Model) viewConfirm() string {
 	return fmt.Sprintf(
-		"%s\n\nAudio: %s\nStyle: %s\nAspect: %s\nDuration: %s\nLyrics: %s\n\n%s",
+		"%s\n\nAudio: %s\nPreset: %s\nStyle: %s\nAspect: %s\nDuration: %s\nLyrics: %s\n\n%s",
 		headerStyle.Render("Confirm"),
 		model.audioPath,
+		presetOptions()[model.presetIdx],
 		styleOptions()[model.styleIdx],
 		aspectOptions()[model.aspectIdx],
 		model.durationInput.Value(),
@@ -472,6 +490,7 @@ func (model Model) startJobCmd() tea.Cmd {
 	input := jobs.JobInput{
 		AudioPath:       model.audioPath,
 		Lyrics:          model.lyrics,
+		Preset:          presetOptions()[model.presetIdx],
 		StylePreset:     styleOptions()[model.styleIdx],
 		AspectRatio:     aspectOptions()[model.aspectIdx],
 		DurationSeconds: parseDuration(model.durationInput.Value()),
@@ -571,6 +590,10 @@ func renderSelect(title string, options []string, selected int) string {
 
 func inputOptions() []string {
 	return []string{"Use audio file", "Record audio"}
+}
+
+func presetOptions() []string {
+	return []string{"Hook", "Canvas", "Highlight"}
 }
 
 func styleOptions() []string {

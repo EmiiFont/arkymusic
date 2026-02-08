@@ -28,6 +28,7 @@ type Event struct {
 type JobInput struct {
 	AudioPath       string
 	Lyrics          string
+	Preset          string
 	StylePreset     string
 	AspectRatio     string
 	DurationSeconds int
@@ -99,8 +100,14 @@ func (runner *Runner) Run(ctx context.Context, input JobInput, events chan<- Eve
 		sendTranscript("transcribe", "Transcript ready", transcript, transcriptPath, 0.35)
 	}
 
+	send("analyze", "Analyzing audio", 0.36)
+	analysis, err := audio.Analyze(ctx, runner.FFmpegPath, input.AudioPath)
+	if err != nil {
+		return Result{}, err
+	}
+
 	send("submit", "Submitting to Replicate", 0.4)
-	prompt := buildPrompt(input, enhancedPath, transcript)
+	prompt := buildPrompt(input, enhancedPath, transcript, analysis)
 	prediction, err := runner.Replicate.SubmitPrediction(ctx, replicate.PredictionRequest{
 		Input: map[string]any{
 			"prompt":           prompt,
@@ -133,7 +140,7 @@ func (runner *Runner) Run(ctx context.Context, input JobInput, events chan<- Eve
 		return Result{}, err
 	}
 
-	metaPath, err := writeMetadata(input, prediction.ID, muxedPath, transcript, transcriptPath)
+	metaPath, err := writeMetadata(input, prediction.ID, muxedPath, transcript, transcriptPath, analysis)
 	if err != nil {
 		return Result{}, err
 	}
@@ -242,8 +249,9 @@ func downloadOutput(ctx context.Context, url, outputDir string) (string, error) 
 	return outputPath, nil
 }
 
-func buildPrompt(input JobInput, enhancedPath, transcript string) string {
+func buildPrompt(input JobInput, enhancedPath, transcript string, analysis audio.Analysis) string {
 	promptParts := []string{"cinematic music video visuals"}
+	promptParts = append(promptParts, presetNotes(input.Preset)...)
 	if input.StylePreset != "" {
 		promptParts = append(promptParts, fmt.Sprintf("style %s", input.StylePreset))
 	}
@@ -256,13 +264,42 @@ func buildPrompt(input JobInput, enhancedPath, transcript string) string {
 	if strings.TrimSpace(transcript) != "" {
 		promptParts = append(promptParts, fmt.Sprintf("transcript: %s", strings.TrimSpace(transcript)))
 	}
+	promptParts = append(promptParts, vibeFromAnalysis(analysis)...)
 	if enhancedPath != "" {
 		promptParts = append(promptParts, fmt.Sprintf("audio source %s", filepath.Base(enhancedPath)))
 	}
 	return strings.Join(promptParts, ", ")
 }
 
-func writeMetadata(input JobInput, jobID, videoPath, transcript, transcriptPath string) (string, error) {
+func presetNotes(preset string) []string {
+	switch strings.ToLower(strings.TrimSpace(preset)) {
+	case "hook":
+		return []string{"hook moment", "fast impact", "center focus"}
+	case "canvas":
+		return []string{"seamless loop", "subtle motion", "ambient visuals"}
+	case "highlight":
+		return []string{"dramatic highlight", "cinematic focus", "story beat"}
+	default:
+		return nil
+	}
+}
+
+func vibeFromAnalysis(analysis audio.Analysis) []string {
+	var notes []string
+	if analysis.BPM >= 120 {
+		notes = append(notes, "fast paced", "dynamic cuts", "high energy")
+	} else if analysis.BPM > 0 && analysis.BPM <= 90 {
+		notes = append(notes, "slow motion", "smooth transitions", "ambient")
+	}
+	if analysis.MaxVolume >= -10 {
+		notes = append(notes, "intense", "vibrant colors", "high contrast")
+	} else if analysis.MeanVolume <= -25 && analysis.MeanVolume < 0 {
+		notes = append(notes, "minimalist", "soft lighting", "calm")
+	}
+	return notes
+}
+
+func writeMetadata(input JobInput, jobID, videoPath, transcript, transcriptPath string, analysis audio.Analysis) (string, error) {
 	if err := os.MkdirAll(input.OutputDir, 0o755); err != nil {
 		return "", err
 	}
@@ -271,12 +308,17 @@ func writeMetadata(input JobInput, jobID, videoPath, transcript, transcriptPath 
 		"job_id":           jobID,
 		"audio_path":       input.AudioPath,
 		"lyrics":           input.Lyrics,
+		"preset":           input.Preset,
 		"style_preset":     input.StylePreset,
 		"aspect_ratio":     input.AspectRatio,
 		"duration_seconds": input.DurationSeconds,
 		"video_path":       videoPath,
 		"transcript":       transcript,
 		"transcript_path":  transcriptPath,
+		"audio_bpm":        analysis.BPM,
+		"audio_mean_db":    analysis.MeanVolume,
+		"audio_max_db":     analysis.MaxVolume,
+		"audio_duration":   analysis.Duration,
 		"created_at":       time.Now().Format(time.RFC3339),
 	}
 

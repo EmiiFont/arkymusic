@@ -35,7 +35,7 @@ func main() {
 	}
 
 	program := tea.NewProgram(tui.NewModel(cfg, jobRunner), tea.WithAltScreen())
-	if err := program.Start(); err != nil {
+	if _, err := program.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
