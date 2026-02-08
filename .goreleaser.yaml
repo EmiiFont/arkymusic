@@ -1,0 +1,27 @@
+project_name: arkymusic
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: a2v
+    main: ./cmd/a2v
+    binary: a2v
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  skip: true
