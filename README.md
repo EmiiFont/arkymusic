@@ -4,7 +4,7 @@ Generate cinematic short-form videos from audio using a local TUI. The MVP flow 
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.23+
 - Docker (for Whisper transcription)
 - `ffmpeg` available on PATH (or set `FFMPEG_PATH`)
 - Replicate API key (for video generation), loaded from `.env` if present

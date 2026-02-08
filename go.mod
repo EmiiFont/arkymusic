@@ -1,6 +1,6 @@
 module github.com/audio2videoAI
 
-go 1.25.1
+go 1.23.1
 
 require (
 	github.com/charmbracelet/bubbles v0.18.0
